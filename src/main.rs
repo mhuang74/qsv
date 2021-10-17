@@ -103,6 +103,7 @@ mod config;
 mod index;
 mod select;
 mod util;
+pub mod logger_config;
 
 static USAGE: &str = concat!(
     "

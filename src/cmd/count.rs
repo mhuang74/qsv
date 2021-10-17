@@ -34,7 +34,10 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
         .no_headers(args.flag_no_headers);
 
     let count = match conf.indexed()? {
-        Some(idx) => idx.count(),
+        Some(idx) => {
+            log::info!("Count (via index): {}", idx.count());
+            idx.count()
+        },
         None => {
             let mut rdr = conf.reader()?;
             let mut count = 0u64;
@@ -42,6 +45,7 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
             while rdr.read_byte_record(&mut record)? {
                 count += 1;
             }
+            log::info!("Count (no index): {}", &count);
             count
         }
     };
