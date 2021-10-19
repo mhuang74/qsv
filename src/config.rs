@@ -94,12 +94,6 @@ impl Config {
             }
         };
 
-
-
-        crate::logger_config::init_logger("qsv.log").unwrap();
-
-        log::info!("input file: {:?}", (&path).as_ref().unwrap());
-
         Config {
             path,
             idx_path: None,

@@ -33,6 +33,13 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
         .delimiter(args.flag_delimiter)
         .no_headers(args.flag_no_headers);
 
+    log::info!("cmd: count, input: {:?}, no_header: {}, delimiter: {:?}", 
+                (&args.arg_input).clone().unwrap(),
+                &args.flag_no_headers,
+                &args.flag_delimiter
+            );
+
+
     let count = match conf.indexed()? {
         Some(idx) => {
             log::info!("Count (via index): {}", idx.count());

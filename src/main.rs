@@ -103,7 +103,8 @@ mod config;
 mod index;
 mod select;
 mod util;
-pub mod logger_config;
+mod logger_config;
+
 
 static USAGE: &str = concat!(
     "
@@ -128,6 +129,8 @@ struct Args {
 }
 
 fn main() {
+    logger_config::init_logger("qsv.log").unwrap();
+
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| {
             d.options_first(true)
@@ -153,18 +156,19 @@ Please choose one of the following commands:",
             Ok(()) => process::exit(0),
             Err(CliError::Flag(err)) => err.exit(),
             Err(CliError::Csv(err)) => {
-                werr!("{}", err);
+                log::error!("{}", err);
                 process::exit(1);
             }
             Err(CliError::Io(ref err)) if err.kind() == io::ErrorKind::BrokenPipe => {
+                log::warn!("{}", err);
                 process::exit(0);
             }
             Err(CliError::Io(err)) => {
-                werr!("{}", err);
+                log::error!("{}", err);
                 process::exit(1);
             }
             Err(CliError::Other(msg)) => {
-                werr!("{}", msg);
+                log::error!("{}", msg);
                 process::exit(1);
             }
         },
@@ -224,6 +228,7 @@ impl Command {
                 argv[1].to_lowercase()
             )));
         }
+
         match self {
             Command::Apply => cmd::apply::run(argv),
             Command::Behead => cmd::behead::run(argv),

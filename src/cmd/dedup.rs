@@ -49,11 +49,24 @@ struct Args {
 
 pub fn run(argv: &[&str]) -> CliResult<()> {
     let args: Args = util::get_args(USAGE, argv)?;
+
+    log::info!("cmd: dedup, input: {:?}, select: {:?}, no_case: {}, dupes_output: {:?}, output: {:?}, no_header: {}, delimiter: {:?}", 
+        (&args.arg_input).clone().unwrap(),
+        &args.flag_select,
+        &args.flag_no_case,
+        (&args.flag_dupes_output).clone().unwrap(),
+        (&args.flag_output).clone().unwrap(),
+        &args.flag_no_headers,
+        &args.flag_delimiter
+    );
+
     let no_case = args.flag_no_case;
     let rconfig = Config::new(&args.arg_input)
         .delimiter(args.flag_delimiter)
         .no_headers(args.flag_no_headers)
         .select(args.flag_select);
+
+
 
     let mut rdr = rconfig.reader()?;
     let mut wtr = Config::new(&args.flag_output).writer()?;

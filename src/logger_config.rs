@@ -5,7 +5,6 @@ use log4rs::{Handle, append::{
     }, config::{Appender, Config, Root}, encode::pattern::PatternEncoder, filter::threshold::ThresholdFilter};
 
 pub fn init_logger(file_path: &str) -> Result<(), SetLoggerError> {
-    let level = log::LevelFilter::Info;
 
     // Build a stderr logger.
     let stderr = ConsoleAppender::builder()
@@ -23,16 +22,18 @@ pub fn init_logger(file_path: &str) -> Result<(), SetLoggerError> {
     // Log Trace level output to file where trace is the default level
     // and the programmatically specified level to stderr.
     let config = Config::builder()
-        .appender(Appender::builder().build("logfile", Box::new(logfile)))
         .appender(
             Appender::builder()
-                .filter(Box::new(ThresholdFilter::new(level)))
-                .build("stderr", Box::new(stderr)),
-        )
+                .filter(Box::new(ThresholdFilter::new(LevelFilter::Info)))
+                .build("logfile", Box::new(logfile)))
+        .appender(
+            Appender::builder()
+                .filter(Box::new(ThresholdFilter::new(LevelFilter::Warn)))
+                .build("stderr", Box::new(stderr)))
         .build(
             Root::builder()
                 .appender("logfile")
-        //        .appender("stderr")
+                .appender("stderr")
                 .build(LevelFilter::Trace),
         )
         .unwrap();
