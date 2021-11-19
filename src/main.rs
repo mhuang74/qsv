@@ -1,26 +1,4 @@
-extern crate byteorder;
-extern crate chrono;
 extern crate crossbeam_channel as channel;
-extern crate csv;
-extern crate csv_index;
-extern crate currency;
-extern crate dateparser;
-extern crate docopt;
-extern crate filetime;
-extern crate hlua;
-#[macro_use]
-extern crate lazy_static;
-extern crate itertools;
-extern crate mimalloc;
-extern crate num_cpus;
-extern crate rand;
-extern crate regex;
-extern crate reverse_geocoder;
-extern crate serde;
-extern crate serde_json;
-extern crate tabwriter;
-extern crate threadpool;
-extern crate uuid;
 
 use std::borrow::ToOwned;
 use std::env;
@@ -32,6 +10,7 @@ use serde::Deserialize;
 
 use docopt::Docopt;
 
+#[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -63,8 +42,8 @@ macro_rules! command_list {
     cat         Concatenate by row or column
     count       Count records
     dedup       Remove redundant rows
-    exclude     Excludes the records in one CSV from another
     enum        Add a new column enumerating CSV lines
+    exclude     Excludes the records in one CSV from another
     explode     Explode rows based on some column separator
     fill        Fill empty values
     fixlengths  Makes all records have same length
@@ -72,6 +51,7 @@ macro_rules! command_list {
     fmt         Format CSV output (change field delimiter)
     foreach     Loop over a CSV file to execute bash commands (*nix only)
     frequency   Show frequency tables
+    generate    Generate test data by profiling a CSV
     headers     Show header names
     help        Show this usage message.
     index       Create CSV index for faster access
@@ -87,11 +67,11 @@ macro_rules! command_list {
     reverse     Reverse rows of CSV data
     search      Search CSV data with a regex
     searchset   Search CSV data with a regex set
-    select      Select columns from CSV
+    select      Select, re-order, duplicate or drop columns
     slice       Slice records from CSV
-    sort        Sort CSV data
+    sort        Sort CSV data in alphabetical, numerical, reverse or random order
     split       Split CSV data into many files
-    stats       Compute basic statistics
+    stats       Infer data types and compute descriptive statistics
     table       Align CSV data into columns
     transpose   Transpose rows/columns of CSV data
 "
@@ -116,7 +96,7 @@ Options:
     --list        List all commands available.
     -h, --help    Display this message
     <command> -h  Display the command help message
-    --version     Print version info and exit
+    --version     Print version info, mem allocator, num_cpus then exit
 
 Commands:",
     command_list!()
@@ -192,6 +172,7 @@ enum Command {
     Fmt,
     ForEach,
     Frequency,
+    Generate,
     Headers,
     Help,
     Index,
@@ -243,6 +224,7 @@ impl Command {
             Command::Flatten => cmd::flatten::run(argv),
             Command::Fmt => cmd::fmt::run(argv),
             Command::Frequency => cmd::frequency::run(argv),
+            Command::Generate => cmd::generate::run(argv),
             Command::Headers => cmd::headers::run(argv),
             Command::Help => {
                 wout!("{}", USAGE);

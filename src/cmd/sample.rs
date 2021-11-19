@@ -1,15 +1,12 @@
 use std::io;
 
-use byteorder::{ByteOrder, LittleEndian};
-use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
-use rand::{self, Rng, SeedableRng};
+use rand::{self, rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 
 use crate::config::{Config, Delimiter};
 use crate::index::Indexed;
-use crate::serde::Deserialize;
 use crate::util;
 use crate::CliResult;
+use serde::Deserialize;
 
 static USAGE: &str = "
 Randomly samples CSV data uniformly using memory proportional to the size of
@@ -39,7 +36,7 @@ sample options:
 Common options:
     -h, --help             Display this message
     -o, --output <file>    Write output to <file> instead of stdout.
-    -n, --no-headers       When set, the first row will be consider as part of
+    -n, --no-headers       When set, the first row will be considered as part of
                            the population to sample from. (When not set, the
                            first row is the header row and will always appear
                            in the output.)
@@ -130,16 +127,12 @@ fn sample_reservoir<R: io::Read>(
     // Seeding rng
     let mut rng: StdRng = match seed {
         None => StdRng::from_rng(rand::thread_rng()).unwrap(),
-        Some(seed) => {
-            let mut buf = [0u8; 32];
-            LittleEndian::write_u64(&mut buf, seed as u64);
-            SeedableRng::from_seed(buf)
-        }
+        Some(seed) => StdRng::seed_from_u64(seed as u64),
     };
 
     // Now do the sampling.
     for (i, row) in records {
-        let random = rng.gen_range(0, i + 1);
+        let random = rng.gen_range(0..i + 1);
         if random < sample_size as usize {
             reservoir[random] = row?;
         }

@@ -57,6 +57,14 @@ jobs:
             artifact_name: qsv.exe
             asset_name: qsv-${{ needs.analyze-tags.outputs.previous-tag }}-i686-pc-windows-msvc.zip
             use-cross: true
+          - os: windows-latest
+            os-name: windows
+            target: x86_64-pc-windows-gnu
+            architecture: x86_64
+            artifact_name: qsv.exe
+            asset_name: qsv-${{ needs.analyze-tags.outputs.previous-tag }}-x86_64-pc-windows-gnu.zip
+            addl-build-args: --no-default-features
+            use-cross: false
           - os: macos-latest
             os-name: macos
             target: x86_64-apple-darwin
@@ -64,6 +72,29 @@ jobs:
             artifact_name: qsv
             asset_name: qsv-${{ needs.analyze-tags.outputs.previous-tag }}-x86_64-apple-darwin.zip
             use-cross: false
+          - os: ubuntu-latest
+            os-name: linux
+            target: aarch64-unknown-linux-gnu
+            architecture: aarch64
+            artifact_name: qsv
+            asset_name: qsv-${{ needs.analyze-tags.outputs.previous-tag }}-aarch64-unknown-linux-gnu.zip
+            use-cross: true
+          - os: ubuntu-latest
+            os-name: linux
+            target: arm-unknown-linux-gnueabihf
+            architecture: arm
+            artifact_name: qsv
+            asset_name: qsv-${{ needs.analyze-tags.outputs.previous-tag }}-arm-unknown-linux-gnueabihf.zip
+            use-cross: true
+            addl-build-args: --no-default-features
+          - os: ubuntu-latest
+            os-name: linux
+            target: arm-unknown-linux-musleabihf
+            architecture: arm
+            artifact_name: qsv
+            asset_name: qsv-${{ needs.analyze-tags.outputs.previous-tag }}-arm-unknown-linux-musleabihf.zip
+            use-cross: true
+            addl-build-args: --no-default-features
 
     steps:
     - name: Installing Rust toolchain
@@ -84,7 +115,7 @@ jobs:
         command: build
         use-cross: ${{ matrix.job.use-cross }}
         toolchain: ${{ matrix.rust }}
-        args: --release --target ${{ matrix.job.target }}
+        args: --release --target ${{ matrix.job.target }} ${{ matrix.job.addl-build-args }}
     - name: Zip up binaries
       run: 7z a -tzip ${{ matrix.job.asset_name }} target/${{ matrix.job.target }}/release/${{ matrix.job.artifact_name }}
     - name: Upload binaries to release

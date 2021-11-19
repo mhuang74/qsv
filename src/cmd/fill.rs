@@ -5,9 +5,9 @@ use std::ops;
 
 use crate::config::{Config, Delimiter};
 use crate::select::{SelectColumns, Selection};
-use crate::serde::Deserialize;
 use crate::util;
 use crate::CliResult;
+use serde::Deserialize;
 
 static USAGE: &str = "
 Fill empty fields in selected columns of a CSV.
@@ -351,7 +351,7 @@ where
         F: FnMut(B) -> B,
     {
         MapSelected {
-            selection: selector.iter().map(|&x| x).collect(),
+            selection: selector.iter().copied().collect(),
             selection_index: 0,
             index: 0,
             iterator: self,

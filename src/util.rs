@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::cmp;
+use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -12,12 +14,31 @@ use serde::de::{Deserialize, DeserializeOwned, Deserializer, Error};
 
 use crate::config::{Config, Delimiter};
 use crate::CliResult;
+use indicatif::{ProgressBar, ProgressStyle};
+use thousands::Separable;
 
 pub fn num_cpus() -> usize {
     num_cpus::get()
 }
 
+pub fn max_jobs() -> usize {
+    let cpus = num_cpus::get();
+    let max_jobs_env = match env::var("QSV_MAX_JOBS") {
+        Ok(val) => val.parse::<isize>().unwrap_or_default(),
+        Err(_) => 0,
+    };
+    match max_jobs_env {
+        x if x > cpus as isize => cpus,
+        x if x <= 0 => cmp::max(cpus / 4, 1),
+        _ => max_jobs_env as usize,
+    }
+}
+
 pub fn version() -> String {
+    #[cfg(feature = "mimalloc")]
+    let malloc_kind = "mimalloc".to_string();
+    #[cfg(not(feature = "mimalloc"))]
+    let malloc_kind = "standard".to_string();
     let (maj, min, pat, pre) = (
         option_env!("CARGO_PKG_VERSION_MAJOR"),
         option_env!("CARGO_PKG_VERSION_MINOR"),
@@ -27,13 +48,66 @@ pub fn version() -> String {
     match (maj, min, pat, pre) {
         (Some(maj), Some(min), Some(pat), Some(pre)) => {
             if pre.is_empty() {
-                return format!("{}.{}.{}", maj, min, pat);
+                return format!("{}.{}.{}-{}-{}", maj, min, pat, malloc_kind, max_jobs());
             } else {
-                return format!("{}.{}.{}-{}", maj, min, pat, pre);
+                return format!(
+                    "{}.{}.{}-{}-{}-{}",
+                    maj,
+                    min,
+                    pat,
+                    pre,
+                    malloc_kind,
+                    max_jobs()
+                );
             }
         }
         _ => "".to_owned(),
     }
+}
+
+pub fn count_rows(conf: &Config) -> u64 {
+    match conf.indexed().unwrap() {
+        Some(idx) => idx.count(),
+        None => {
+            let mut rdr = conf.reader().unwrap();
+            let mut count = 0u64;
+            let mut record = csv::ByteRecord::new();
+            while rdr.read_byte_record(&mut record).unwrap() {
+                count += 1;
+            }
+            count
+        }
+    }
+}
+
+pub fn prep_progress(progress: &ProgressBar, record_count: u64) {
+    progress.set_length(record_count);
+    progress.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] [{bar:20} {percent}%{msg}] ({eta})")
+            .progress_chars("=>-"),
+    );
+    progress.set_message(format!(
+        " of {} records",
+        record_count.separate_with_commas()
+    ));
+    progress.set_draw_delta(record_count / 100);
+}
+
+pub fn finish_progress(progress: &ProgressBar) {
+    let per_sec_rate = progress.per_sec();
+
+    let finish_template = format!(
+        "[{{elapsed_precise}}] [{{bar:20}} {{percent}}%{{msg}}] ({}/sec)",
+        per_sec_rate.separate_with_commas()
+    );
+
+    progress.set_style(
+        ProgressStyle::default_bar()
+            .template(&finish_template)
+            .progress_chars("=>-"),
+    );
+    progress.finish();
 }
 
 pub fn get_args<T>(usage: &str, argv: &[&str]) -> CliResult<T>

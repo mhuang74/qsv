@@ -1,10 +1,11 @@
 use regex::bytes::RegexBuilder;
+use std::env;
 
 use crate::config::{Config, Delimiter};
 use crate::select::SelectColumns;
-use crate::serde::Deserialize;
 use crate::util;
 use crate::CliResult;
+use serde::Deserialize;
 
 static USAGE: &str = "
 Filters CSV data by whether the given regex matches a row.
@@ -38,7 +39,8 @@ Common options:
                            Must be a single character. (default: ,)
     -f, --flag <column>    If given, the command will not filter rows
                            but will instead flag the found rows in a new
-                           column named <column>.
+                           column named <column>, with the row numbers
+                           of the matched rows.
 ";
 
 #[derive(Deserialize)]
@@ -57,9 +59,13 @@ struct Args {
 
 pub fn run(argv: &[&str]) -> CliResult<()> {
     let args: Args = util::get_args(USAGE, argv)?;
+    let regex_unicode = match env::var("QSV_REGEX_UNICODE") {
+        Ok(_) => true,
+        Err(_) => args.flag_unicode,
+    };
     let pattern = RegexBuilder::new(&*args.arg_regex)
         .case_insensitive(args.flag_ignore_case)
-        .unicode(args.flag_unicode)
+        .unicode(regex_unicode)
         .build()?;
     let rconfig = Config::new(&args.arg_input)
         .delimiter(args.flag_delimiter)
@@ -80,14 +86,22 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
         wtr.write_record(&headers)?;
     }
     let mut record = csv::ByteRecord::new();
+    let mut flag_rowi: u64 = 1;
+    let mut _matched_rows = String::from("");
     while rdr.read_byte_record(&mut record)? {
         let mut m = sel.select(&record).any(|f| pattern.is_match(f));
         if args.flag_invert_match {
             m = !m;
         }
 
-        if let Some(_) = args.flag_flag {
-            record.push_field(if m { b"1" } else { b"0" });
+        if args.flag_flag.is_some() {
+            flag_rowi += 1;
+            record.push_field(if m {
+                _matched_rows = flag_rowi.to_string();
+                _matched_rows.as_bytes()
+            } else {
+                b"0"
+            });
             wtr.write_byte_record(&record)?;
         } else if m {
             wtr.write_byte_record(&record)?;

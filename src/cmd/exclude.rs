@@ -4,14 +4,14 @@ use std::fs;
 use std::io;
 use std::str;
 
-use crate::byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
 
 use crate::config::{Config, Delimiter};
 use crate::index::Indexed;
 use crate::select::{SelectColumns, Selection};
-use crate::serde::Deserialize;
 use crate::util;
 use crate::CliResult;
+use serde::Deserialize;
 
 static USAGE: &str = "
 Removes a set of CSV data from another set based on the specified columns.

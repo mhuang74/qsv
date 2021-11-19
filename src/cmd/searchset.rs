@@ -3,12 +3,13 @@ use regex::bytes::RegexSetBuilder;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 use std::path::Path;
+use std::env;
 
 use crate::config::{Config, Delimiter};
 use crate::select::SelectColumns;
-use crate::serde::Deserialize;
 use crate::util;
 use crate::CliResult;
+use serde::Deserialize;
 
 static USAGE: &str = "
 Filters CSV data by whether the given regex set matches a row.
@@ -48,7 +49,9 @@ Common options:
                            Must be a single character. (default: ,)
     -f, --flag <column>    If given, the command will not filter rows
                            but will instead flag the found rows in a new
-                           column named <column>.
+                           column named <column>. For each found row, <column>
+                           is set to the row number of the row, followed by a
+                           semicolon, then a list of the matching regexes.
 ";
 
 #[derive(Deserialize)]
@@ -68,12 +71,10 @@ struct Args {
 fn read_regexset(filename: impl AsRef<Path>) -> io::Result<Vec<String>> {
     match File::open(filename) {
         Ok(f) => BufReader::new(f).lines().collect(),
-        Err(_) => {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Cannot open regexset file.",
-            ))
-        }
+        Err(_) => Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Cannot open regexset file.",
+        )),
     }
 }
 
@@ -81,10 +82,13 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
     let args: Args = util::get_args(USAGE, argv)?;
 
     let regexset = read_regexset(&*args.arg_regexset_file)?;
-
+    let regex_unicode = match env::var("QSV_REGEX_UNICODE") {
+        Ok(_) => true,
+        Err(_) => args.flag_unicode,
+    };
     let pattern = RegexSetBuilder::new(&regexset)
         .case_insensitive(args.flag_ignore_case)
-        .unicode(args.flag_unicode)
+        .unicode(regex_unicode)
         .build()?;
     let rconfig = Config::new(&args.arg_input)
         .delimiter(args.flag_delimiter)
@@ -109,6 +113,9 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
     let do_match_list = args.flag_flag.is_some();
 
     let mut record = csv::ByteRecord::new();
+    let mut flag_rowi: u64 = 1;
+    let mut _matched_rows = String::from("");
+    let mut _match_list_with_row = String::from("");
     while rdr.read_byte_record(&mut record)? {
         let mut m = sel.select(&record).any(|f| {
             let matched = pattern.is_match(f);
@@ -126,11 +133,14 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
         }
 
         if do_match_list {
+            flag_rowi += 1;
             record.push_field(if m {
+                _matched_rows = flag_rowi.to_string();
                 if args.flag_invert_match {
-                    b"1"
+                    _matched_rows.as_bytes()
                 } else {
-                    match_list.as_bytes()
+                    _match_list_with_row = format!("{};{}", _matched_rows, match_list);
+                    _match_list_with_row.as_bytes()
                 }
             } else {
                 b"0"

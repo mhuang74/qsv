@@ -8,9 +8,9 @@ use regex::Regex;
 
 use crate::config::{Config, Delimiter};
 use crate::select::SelectColumns;
-use crate::serde::Deserialize;
 use crate::util::{self, FilenameTemplate};
 use crate::CliResult;
+use serde::Deserialize;
 
 static USAGE: &str = "
 Partitions the given CSV data into chunks based on the value of a column
@@ -59,7 +59,7 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
     fs::create_dir_all(&args.arg_outdir)?;
 
     // It would be nice to support efficient parallel partitions, but doing
-    // do would involve more complicated inter-thread communication, with
+    // so would involve more complicated inter-thread communication, with
     // multiple readers and writers, and some way of passing buffers
     // between them.
     args.sequential_partition()

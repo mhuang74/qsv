@@ -14,3 +14,11 @@ builds
 .vscode/launch.json
 *.log
 *.code-workspace
+*.xls
+*.xlsx
+*.zip
+.DS_store
+*.txt
+*.svg
+perf.data*
+*.json

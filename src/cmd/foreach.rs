@@ -1,4 +1,4 @@
-use crate::regex::bytes::{NoExpand, Regex};
+use regex::bytes::{NoExpand, Regex};
 #[allow(unused_imports)]
 use std::ffi::OsStr;
 use std::io::BufReader;
@@ -10,6 +10,7 @@ use crate::config::{Config, Delimiter};
 use crate::select::SelectColumns;
 use crate::util;
 use crate::CliResult;
+use indicatif::ProgressBar;
 use serde::Deserialize;
 
 static USAGE: &str = "
@@ -45,6 +46,7 @@ Common options:
                            headers.
     -d, --delimiter <arg>  The field delimiter for reading CSV data.
                            Must be a single character. (default: ,)
+    -q, --quiet            Do not display progress bar.
 ";
 
 #[derive(Deserialize)]
@@ -56,6 +58,7 @@ struct Args {
     flag_new_column: Option<String>,
     flag_no_headers: bool,
     flag_delimiter: Option<Delimiter>,
+    flag_quiet: bool,
 }
 
 pub fn run(argv: &[&str]) -> CliResult<()> {
@@ -83,11 +86,22 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
     let mut record = csv::ByteRecord::new();
     let mut output_headers_written = false;
 
+    // prep progress bar
+    let mut record_count: u64 = 0;
+    let progress = ProgressBar::new(record_count);
+    if !args.flag_quiet {
+        record_count = util::count_rows(&rconfig);
+        util::prep_progress(&progress, record_count);
+    }
+
     while rdr.read_byte_record(&mut record)? {
+        if !args.flag_quiet {
+            progress.inc(1);
+        }
         let current_value = &record[column_index];
 
         let templated_command = template_pattern
-            .replace_all(&args.arg_command.as_bytes(), current_value)
+            .replace_all(args.arg_command.as_bytes(), current_value)
             .to_vec();
 
         #[allow(unused_mut)]
@@ -100,9 +114,9 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
 
         let cmd_args: Vec<String> = command_pieces
             .map(|piece| {
-                let clean_piece = cleaner_pattern.replace_all(&piece.as_bytes(), NoExpand(b""));
+                let clean_piece = cleaner_pattern.replace_all(piece.as_bytes(), NoExpand(b""));
 
-                return String::from_utf8(clean_piece.into_owned()).expect("encoding error");
+                String::from_utf8(clean_piece.into_owned()).expect("encoding error")
             })
             .collect();
 
@@ -150,8 +164,8 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
                 }
 
                 while stdout_rdr.read_byte_record(&mut output_record)? {
-                    if let Some(_) = &args.flag_new_column {
-                        output_record.push_field(&current_value);
+                    if args.flag_new_column.is_some() {
+                        output_record.push_field(current_value);
                     }
 
                     wtr.write_byte_record(&output_record)?;
@@ -161,6 +175,8 @@ pub fn run(argv: &[&str]) -> CliResult<()> {
             cmd.wait().unwrap();
         }
     }
-
+    if !args.flag_quiet {
+        util::finish_progress(&progress);
+    }
     Ok(())
 }

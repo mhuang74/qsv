@@ -1,5 +1,3 @@
-#[allow(deprecated, unused_imports)]
-use std::ascii::AsciiExt;
 use std::borrow::ToOwned;
 use std::env;
 use std::fs;
@@ -7,12 +5,17 @@ use std::io::{self, Read};
 use std::ops::Deref;
 use std::path::PathBuf;
 
-use crate::serde::de::{Deserialize, Deserializer, Error};
+use serde::de::{Deserialize, Deserializer, Error};
 
 use crate::index::Indexed;
 use crate::select::{SelectColumns, Selection};
 use crate::util;
 use crate::CliResult;
+
+// rdr default is 8k in csv crate, we're doubling it
+const DEFAULT_RDR_BUFFER_CAPACITY: usize = 16 * (1 << 10);
+// previous wtr default in xsv is 32k, we're doubling it
+const DEFAULT_WTR_BUFFER_CAPACITY: usize = 64 * (1 << 10);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Delimiter(pub u8);
@@ -26,34 +29,41 @@ impl Delimiter {
     pub fn as_byte(self) -> u8 {
         self.0
     }
+
+    fn decode_delimiter(s: String) -> Result<Delimiter, String> {
+        if s == r"\t" {
+            return Ok(Delimiter(b'\t'));
+        }
+
+        if s.len() != 1 {
+            let msg = format!(
+                "Could not convert '{}' to a single \
+                            ASCII character.",
+                s
+            );
+            return Err(msg);
+        }
+
+        let c = s.chars().next().unwrap();
+        if c.is_ascii() {
+            Ok(Delimiter(c as u8))
+        } else {
+            let msg = format!(
+                "Could not convert '{}' \
+                            to ASCII delimiter.",
+                c
+            );
+            Err(msg)
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Delimiter {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Delimiter, D::Error> {
-        let c = String::deserialize(d)?;
-        match &*c {
-            r"\t" => Ok(Delimiter(b'\t')),
-            s => {
-                if s.len() != 1 {
-                    let msg = format!(
-                        "Could not convert '{}' to a single \
-                                       ASCII character.",
-                        s
-                    );
-                    return Err(D::Error::custom(msg));
-                }
-                let c = s.chars().next().unwrap();
-                if c.is_ascii() {
-                    Ok(Delimiter(c as u8))
-                } else {
-                    let msg = format!(
-                        "Could not convert '{}' \
-                                       to ASCII delimiter.",
-                        c
-                    );
-                    Err(D::Error::custom(msg))
-                }
-            }
+        let s = String::deserialize(d)?;
+        match Delimiter::decode_delimiter(s) {
+            Ok(delim) => Ok(delim),
+            Err(msg) => Err(D::Error::custom(msg)),
         }
     }
 }
@@ -80,15 +90,21 @@ impl<T: io::Seek + io::Read> SeekRead for T {}
 
 impl Config {
     pub fn new(path: &Option<String>) -> Config {
+        let default_delim = match env::var("QSV_DEFAULT_DELIMITER") {
+            Ok(delim) => Delimiter::decode_delimiter(delim).unwrap().as_byte(),
+            _ => b',',
+        };
         let (path, delim) = match *path {
-            None => (None, b','),
-            Some(ref s) if s.deref() == "-" => (None, b','),
+            None => (None, default_delim),
+            Some(ref s) if s.deref() == "-" => (None, default_delim),
             Some(ref s) => {
                 let path = PathBuf::from(s);
                 let delim = if path.extension().map_or(false, |v| v == "tsv" || v == "tab") {
                     b'\t'
-                } else {
+                } else if path.extension().map_or(false, |v| v == "csv") {
                     b','
+                } else {
+                    default_delim
                 };
                 (Some(path), delim)
             }
@@ -117,11 +133,19 @@ impl Config {
         self
     }
 
+    pub fn get_delimiter(&self) -> u8 {
+        self.delimiter
+    }
+
     pub fn no_headers(mut self, mut yes: bool) -> Config {
         if env::var("QSV_TOGGLE_HEADERS").unwrap_or_else(|_| "0".to_owned()) == "1" {
             yes = !yes;
         }
-        self.no_headers = yes;
+        if env::var("QSV_NO_HEADERS").is_ok() {
+            self.no_headers = true;
+        } else {
+            self.no_headers = yes;
+        }
         self
     }
 
@@ -292,6 +316,10 @@ impl Config {
     }
 
     pub fn from_reader<R: Read>(&self, rdr: R) -> csv::Reader<R> {
+        let rdr_capacitys = env::var("QSV_RDR_BUFFER_CAPACITY")
+            .unwrap_or_else(|_| DEFAULT_RDR_BUFFER_CAPACITY.to_string());
+        let rdr_buffer: usize = rdr_capacitys.parse().unwrap_or(DEFAULT_RDR_BUFFER_CAPACITY);
+
         csv::ReaderBuilder::new()
             .flexible(self.flexible)
             .delimiter(self.delimiter)
@@ -299,6 +327,7 @@ impl Config {
             .quote(self.quote)
             .quoting(self.quoting)
             .escape(self.escape)
+            .buffer_capacity(rdr_buffer)
             .from_reader(rdr)
     }
 
@@ -310,6 +339,10 @@ impl Config {
     }
 
     pub fn from_writer<W: io::Write>(&self, wtr: W) -> csv::Writer<W> {
+        let wtr_capacitys = env::var("QSV_WTR_BUFFER_CAPACITY")
+            .unwrap_or_else(|_| DEFAULT_WTR_BUFFER_CAPACITY.to_string());
+        let wtr_buffer: usize = wtr_capacitys.parse().unwrap_or(DEFAULT_WTR_BUFFER_CAPACITY);
+
         csv::WriterBuilder::new()
             .flexible(self.flexible)
             .delimiter(self.delimiter)
@@ -318,7 +351,7 @@ impl Config {
             .quote_style(self.quote_style)
             .double_quote(self.double_quote)
             .escape(self.escape.unwrap_or(b'\\'))
-            .buffer_capacity(32 * (1 << 10))
+            .buffer_capacity(wtr_buffer)
             .from_writer(wtr)
     }
 }

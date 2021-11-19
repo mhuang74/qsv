@@ -69,6 +69,26 @@ fn searchset_unicode() {
 }
 
 #[test]
+fn searchset_unicode_envvar() {
+    let wrk = Workdir::new("searchset");
+    wrk.create("data.csv", data(true));
+    wrk.create("regexset_unicode.txt", regexset_unicode_file());
+    let mut cmd = wrk.command("searchset");
+    cmd.env("QSV_REGEX_UNICODE", "1");
+    cmd.arg("regexset_unicode.txt").arg("data.csv");
+
+    let got: Vec<Vec<String>> = wrk.read_stdout(&mut cmd);
+    let expected = vec![
+        svec!["h1", "h2"],
+        svec!["foobar", "barfoo"],
+        svec!["barfoo", "foobar"],
+        svec!["is waldo here", "spot"],
+        svec!["Ḟooƀar", "ḃarḟoo"],
+    ];
+    assert_eq!(got, expected);
+}
+
+#[test]
 fn searchset_empty() {
     let wrk = Workdir::new("searchset");
     wrk.create("data.csv", data(true));
@@ -214,8 +234,8 @@ fn searchset_flag() {
     let expected = vec![
         svec!["foobar", "barfoo", "flagged"],
         svec!["a", "b", "0"],
-        svec!["barfoo", "foobar", "[1, 2]"],
-        svec!["is waldo here", "spot", "[3]"],
+        svec!["barfoo", "foobar", "3;[1, 2]"],
+        svec!["is waldo here", "spot", "4;[3]"],
         svec!["Ḟooƀar", "ḃarḟoo", "0"],
         svec!["bleh", "no, Waldo is there", "0"],
     ];
@@ -236,11 +256,11 @@ fn searchset_flag_invert_match() {
     let got: Vec<Vec<String>> = wrk.read_stdout(&mut cmd);
     let expected = vec![
         svec!["foobar", "barfoo", "flagged"],
-        svec!["a", "b", "1"],
+        svec!["a", "b", "2"],
         svec!["barfoo", "foobar", "0"],
         svec!["is waldo here", "spot", "0"],
-        svec!["Ḟooƀar", "ḃarḟoo", "1"],
-        svec!["bleh", "no, Waldo is there", "1"],
+        svec!["Ḟooƀar", "ḃarḟoo", "5"],
+        svec!["bleh", "no, Waldo is there", "6"],
     ];
     assert_eq!(got, expected);
 }
